@@ -25,3 +25,10 @@ Las cuatro `-dev` de backports solo hacen falta si sus librerías ya vienen de b
 ## Diferencia a tener en cuenta
 Desde waybar 0.13 cada barra nombra su capa con su `name` (ya no `waybar`): los scripts que buscan la capa por
 namespace tienen que buscar por PID o por el nombre de la barra.
+
+## CSS: no usar `*` con propiedades de fuente
+En GTK4 el nombre CSS del módulo (`#custom-foo`) va en la caja del módulo y la etiqueta de texto es hija. Un selector
+universal `* { font-family: …; font-size: … }` se aplica directamente a la etiqueta y gana a lo que se ponga en
+`#custom-foo`, y la caída automática de glifos elige la variante «Mono» de las Nerd Fonts (iconos estrechos). Poner la
+fuente en `window#waybar { … }` para que se herede, y listar las fuentes de iconos explícitamente:
+`font-family: "Noto Sans", "Hack Nerd Font", "FontAwesome", sans-serif;`
