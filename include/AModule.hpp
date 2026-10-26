@@ -59,6 +59,10 @@ class AModule : public IModule {
   Glib::RefPtr<Gtk::GestureClick> gesture_click_;
   Glib::RefPtr<Gtk::EventControllerScroll> controller_scroll_;
   Glib::RefPtr<Gtk::EventControllerMotion> controller_motion_;
+  // "menu"/"menu-file"/"menu-actions": popover menu built from the GTK3-style menu-file (GtkMenu/GtkMenuItem)
+  std::unique_ptr<Gtk::PopoverMenu> menu_;
+  Glib::RefPtr<Gio::SimpleActionGroup> menuActions_;
+  void makeMenu();
   bool disable_on_sleep_{false};
 
   // --- Generic format/tooltip resolution (config-only, usable by any module,

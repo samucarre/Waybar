@@ -8,6 +8,13 @@
 
 #include "gdk/gdk.h"
 #include "gdkmm/cursor.h"
+#include <giomm/menu.h>
+#include <giomm/simpleactiongroup.h>
+#include <glibmm/markup.h>
+#include <gtkmm/popovermenu.h>
+
+#include <fstream>
+#include <sstream>
 
 namespace waybar {
 
@@ -79,6 +86,109 @@ AModule::AModule(const Json::Value& config, const std::string& name, const std::
       spdlog::warn("unknown cursor option configured on module {}", name_);
     }
   }
+}
+
+namespace {
+// Reads a GTK3 GtkBuilder menu file (GtkMenu with GtkMenuItem / GtkSeparatorMenuItem children, as documented for
+// the "menu-file" option) and turns it into a flat list of (id, label) entries; a separator is an entry with empty id.
+class MenuFileParser : public Glib::Markup::Parser {
+ public:
+  std::vector<std::pair<std::string, std::string>> entries;
+
+ protected:
+  void on_start_element(Glib::Markup::ParseContext&, const Glib::ustring& element,
+                        const AttributeMap& attributes) override {
+    if (element == "object") {
+      const auto cls = attributes.find("class");
+      const auto id = attributes.find("id");
+      if (cls != attributes.end() && cls->second == "GtkMenuItem") {
+        inItem_ = true;
+        itemId_ = id != attributes.end() ? std::string(id->second) : "";
+        itemLabel_.clear();
+      } else if (cls != attributes.end() && cls->second == "GtkSeparatorMenuItem") {
+        entries.emplace_back("", "");
+      }
+    } else if (element == "property" && inItem_) {
+      const auto name = attributes.find("name");
+      inLabel_ = name != attributes.end() && name->second == "label";
+    }
+  }
+  void on_end_element(Glib::Markup::ParseContext&, const Glib::ustring& element) override {
+    if (element == "property") {
+      inLabel_ = false;
+    } else if (element == "object" && inItem_) {
+      inItem_ = false;
+      if (!itemId_.empty()) entries.emplace_back(itemId_, itemLabel_);
+    }
+  }
+  void on_text(Glib::Markup::ParseContext&, const Glib::ustring& text) override {
+    if (inLabel_) itemLabel_ += text;
+  }
+
+ private:
+  bool inItem_{false};
+  bool inLabel_{false};
+  std::string itemId_;
+  std::string itemLabel_;
+};
+}  // namespace
+
+void AModule::makeMenu() {
+  if (menu_ || w_ == nullptr || !config_["menu-file"].isString()) return;
+  const std::string file{config_["menu-file"].asString()};
+  std::ifstream in{file};
+  if (!in) {
+    spdlog::warn("Module {}: menu-file {} can't be read", name_, file);
+    return;
+  }
+  std::stringstream buf;
+  buf << in.rdbuf();
+  MenuFileParser parser;
+  try {
+    Glib::Markup::ParseContext context{parser};
+    context.parse(buf.str());
+    context.end_parse();
+  } catch (const Glib::Error& e) {
+    spdlog::warn("Module {}: menu-file {} is not valid XML: {}", name_, file, std::string(e.what()));
+    return;
+  }
+  if (parser.entries.empty()) {
+    spdlog::warn("Module {}: menu-file {} has no GtkMenuItem entries", name_, file);
+    return;
+  }
+  menuActions_ = Gio::SimpleActionGroup::create();
+  auto model = Gio::Menu::create();
+  auto section = Gio::Menu::create();
+  for (const auto& [id, label] : parser.entries) {
+    if (id.empty()) {
+      if (section->get_n_items() > 0) {
+        model->append_section(section);
+        section = Gio::Menu::create();
+      }
+      continue;
+    }
+    section->append(label, "menu." + id);
+    menuActions_->add_action(id, [this, id]() {
+      if (config_["menu-actions"][id].isString()) {
+        pid_children_.push_back(util::command::forkExec(config_["menu-actions"][id].asString()));
+      } else {
+        spdlog::warn("Module {}: no menu-actions entry for menu item {}", name_, id);
+      }
+    });
+  }
+  if (section->get_n_items() > 0) model->append_section(section);
+  w_->insert_action_group("menu", menuActions_);
+  menu_ = std::make_unique<Gtk::PopoverMenu>(model);
+  menu_->set_parent(*w_);
+  menu_->set_has_arrow(false);
+  menu_->set_position(Gtk::PositionType::BOTTOM);
+  // the popover has to be unparented before the module widget goes away
+  w_->signal_destroy().connect([this]() {
+    if (menu_) {
+      menu_->unparent();
+      menu_.reset();
+    }
+  });
 }
 
 AModule::~AModule() {
@@ -154,6 +264,10 @@ void AModule::handleClickEvent(uint n_button, int n_press, double x, double y,
     // First call module action
     this->AModule::doAction(rec->second);
     format = rec->second;
+  }
+  if (rec != eventMap_.cend() && config_["menu"].isString() && rec->second == config_["menu"].asString()) {
+    if (!menu_) makeMenu();
+    if (menu_) menu_->popup();
   }
   // Second call user scripts
   if (!format.empty()) {

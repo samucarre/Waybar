@@ -32,3 +32,9 @@ universal `* { font-family: …; font-size: … }` se aplica directamente a la e
 `#custom-foo`, y la caída automática de glifos elige la variante «Mono» de las Nerd Fonts (iconos estrechos). Poner la
 fuente en `window#waybar { … }` para que se herede, y listar las fuentes de iconos explícitamente:
 `font-family: "Noto Sans", "Hack Nerd Font", "FontAwesome", sans-serif;`
+
+## Menús de los módulos (`menu`, `menu-file`, `menu-actions`)
+El port no los traía (GTK4 no tiene GtkMenu). En esta rama `AModule` lee el `menu-file` con el formato GTK3 documentado
+(GtkMenu con GtkMenuItem/GtkSeparatorMenuItem), monta un `Gio::Menu` por secciones y lo muestra en un `Gtk::PopoverMenu`
+anclado al módulo; cada elemento ejecuta su entrada de `menu-actions`. CSS: `popover.menu > contents`,
+`popover.menu modelbutton`, `popover.menu modelbutton:hover`, `popover.menu separator` (antes `menu`, `menuitem`).
