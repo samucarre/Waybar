@@ -1,7 +1,7 @@
 #include "AIconLabel.hpp"
 
 #include <gdkmm/pixbuf.h>
-#include <glibmm/exception.h>
+#include <glibmm/error.h>
 #include <spdlog/spdlog.h>
 
 #include <regex>
@@ -97,7 +97,7 @@ auto AIconLabel::doUpdate() -> void {
         auto texture{Gdk::Texture::create_for_pixbuf(pixbuf)};
         image_.set(texture);
         image_.set_visible(true);
-      } catch (const Glib::Exception& e) {
+      } catch (const Glib::Error& e) {
         spdlog::warn("Failed to load embedded icon {}: {}", iconLabel, std::string(e.what()));
         image_.set_visible(false);
       }

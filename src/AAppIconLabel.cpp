@@ -1,7 +1,7 @@
 #include "AAppIconLabel.hpp"
 
 #include <gdkmm/pixbuf.h>
-#include <glibmm/exception.h>
+#include <glibmm/error.h>
 #include <glibmm/fileutils.h>
 #include <glibmm/keyfile.h>
 #include <glibmm/miscutils.h>
@@ -183,7 +183,7 @@ void AAppIconLabel::updateAppIcon() {
 
         image_.property_paintable().set_value(texture);
         image_.set_visible(true);
-      } catch (const Glib::Exception& e) {
+      } catch (const Glib::Error& e) {
         spdlog::warn("Failed to load app icon {}: {}", app_icon_name_, std::string(e.what()));
         image_.set_visible(false);
       }

@@ -1,6 +1,6 @@
 #include "modules/image.hpp"
 
-#include <glibmm/exception.h>
+#include <glibmm/error.h>
 #include <json/value.h>
 
 #include <config.hpp>
@@ -246,7 +246,7 @@ void SingleImageStrategy::doUpdate(Gtk::Box& box, const Json::Value& config, int
     int scaled_icon_size = size * image_.get_scale_factor();
     try {
       pixbuf = Gdk::Pixbuf::create_from_file(path_, scaled_icon_size, scaled_icon_size);
-    } catch (const Glib::Exception& e) {
+    } catch (const Glib::Error& e) {
       spdlog::warn("Failed to load image {}: {}", path_, std::string(e.what()));
       pixbuf.reset();
     }

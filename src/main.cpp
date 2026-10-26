@@ -1,5 +1,5 @@
 #include <fcntl.h>
-#include <glibmm/exception.h>
+#include <glibmm/error.h>
 #include <spdlog/spdlog.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -246,7 +246,7 @@ int main(int argc, char* argv[]) {
   } catch (const std::exception& e) {
     spdlog::error("{}", e.what());
     return 1;
-  } catch (const Glib::Exception& e) {
+  } catch (const Glib::Error& e) {
     spdlog::error("{}", static_cast<std::string>(e.what()));
     return 1;
   }
