@@ -58,7 +58,8 @@ void Workspaces::init() {
   }
 
   bindEvents(m_box_);
-  controller_scroll_->set_propagation_phase(Gtk::PropagationPhase::BUBBLE);
+  if (controller_scroll_)  // igual que en sway/workspaces: sin on-scroll o con disable-scroll el controlador es nulo
+    controller_scroll_->set_propagation_phase(Gtk::PropagationPhase::BUBBLE);
 
   dp.emit();
 }
