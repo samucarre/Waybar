@@ -391,9 +391,14 @@ std::string IPC::dispatch(const std::string& dispatcher, const std::string& arg)
   // only when it is rejected. The reply is cached so each click costs one round trip.
   if (!s_legacyDispatchWorks_.has_value() || *s_legacyDispatchWorks_) {
     const std::string reply = getSocket1Reply(cmd);
+    // Hyprland 0.56 with a Lua config answers the legacy form with a Lua parse error
+    // ('error: [string "return hl.dispatch(workspace 2)"]:1: ...'), not "Invalid dispatcher",
+    // so any reply that starts with "error" counts as a rejection too.
     const bool rejected = reply.find("Invalid dispatcher") != std::string::npos ||
                           reply.find("invalid dispatcher") != std::string::npos ||
-                          reply.find("unknown dispatcher") != std::string::npos;
+                          reply.find("unknown dispatcher") != std::string::npos ||
+                          reply.find("hl.dispatch") != std::string::npos ||
+                          reply.rfind("error", 0) == 0;
     if (!rejected) {
       if (!s_legacyDispatchWorks_.has_value()) {
         spdlog::info("Hyprland IPC: legacy dispatch accepted, using it instead of Lua");
