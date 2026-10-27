@@ -63,6 +63,10 @@ AIconLabel::AIconLabel(const Json::Value& config, const std::string& name, const
    * module's "align" (xalign) positions the text inside, as the GTK3 label did. */
   label_.set_hexpand(true);
   label_.set_halign(Gtk::Align::FILL);
+  /* The click/scroll gestures live on the box in the TARGET phase: a click whose target is the
+   * label or the image would never reach them. Let the box be the only target. */
+  label_.set_can_target(false);
+  image_.set_can_target(false);
 }
 
 std::tuple<std::string, std::string> AIconLabel::extractIcon(const std::string& input) {
