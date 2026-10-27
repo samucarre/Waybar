@@ -51,6 +51,7 @@ class IPC {
   static bool isLuaProtocol();
 
   static std::optional<bool> s_luaProtocolDetected_;  // cached detection result
+  static std::optional<bool> s_legacyDispatchWorks_;  // legacy "dispatch" accepted on a >= 0.54 compositor
 
  private:
   void socketListener();

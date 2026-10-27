@@ -21,6 +21,7 @@
 namespace waybar::modules::hyprland {
 
 std::filesystem::path IPC::socketFolder_;
+std::optional<bool> IPC::s_legacyDispatchWorks_;
 std::optional<bool> IPC::s_luaProtocolDetected_;
 
 std::filesystem::path IPC::getSocketFolder(const char* instanceSig) {
@@ -375,15 +376,35 @@ std::string IPC::buildLuaDispatch(const std::string& dispatcher, const std::stri
 }
 
 std::string IPC::dispatch(const std::string& dispatcher, const std::string& arg) {
-  if (isLuaProtocol()) {
-    return getSocket1Reply(buildLuaDispatch(dispatcher, arg));
-  }
   // Legacy format: "dispatch <dispatcher> <arg>"
   std::string cmd = "dispatch " + dispatcher;
   if (!arg.empty()) {
     cmd += " " + arg;
   }
-  return getSocket1Reply(cmd);
+  if (!isLuaProtocol()) {
+    return getSocket1Reply(cmd);
+  }
+  // The version check says >= 0.54, but not every build of that range speaks the Lua
+  // protocol: Hyprland 0.55.2 (Debian 13 on the M3 Max) answers "Invalid dispatcher" to
+  // "/dispatch hl.dsp.focus(...)" and still takes the legacy form. So send the legacy
+  // form first, which is a no-op error on a Lua-only compositor, and fall back to Lua
+  // only when it is rejected. The reply is cached so each click costs one round trip.
+  if (!s_legacyDispatchWorks_.has_value() || *s_legacyDispatchWorks_) {
+    const std::string reply = getSocket1Reply(cmd);
+    const bool rejected = reply.find("Invalid dispatcher") != std::string::npos ||
+                          reply.find("invalid dispatcher") != std::string::npos ||
+                          reply.find("unknown dispatcher") != std::string::npos;
+    if (!rejected) {
+      if (!s_legacyDispatchWorks_.has_value()) {
+        spdlog::info("Hyprland IPC: legacy dispatch accepted, using it instead of Lua");
+        s_legacyDispatchWorks_ = true;
+      }
+      return reply;
+    }
+    spdlog::info("Hyprland IPC: legacy dispatch rejected ({}), using the Lua protocol", reply);
+    s_legacyDispatchWorks_ = false;
+  }
+  return getSocket1Reply(buildLuaDispatch(dispatcher, arg));
 }
 
 }  // namespace waybar::modules::hyprland
