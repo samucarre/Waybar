@@ -38,3 +38,12 @@ El port no los traía (GTK4 no tiene GtkMenu). En esta rama `AModule` lee el `me
 (GtkMenu con GtkMenuItem/GtkSeparatorMenuItem), monta un `Gio::Menu` por secciones y lo muestra en un `Gtk::PopoverMenu`
 anclado al módulo; cada elemento ejecuta su entrada de `menu-actions`. CSS: `popover.menu > contents`,
 `popover.menu modelbutton`, `popover.menu modelbutton:hover`, `popover.menu separator` (antes `menu`, `menuitem`).
+
+## 27-oct-2026: dos arreglos más
+- **Quitar o poner un monitor mataba waybar** (SIGSEGV en `Client::handleMonitorRemoved` → `Gdk::Monitor::get_manufacturer`):
+  el manejador de `items-changed` del modelo de monitores pedía los monitores ya quitados (RefPtr nulo) y sus bucles con
+  contadores sin signo nunca terminaban. Ahora se quitan las barras cuyo GdkMonitor ha invalidado GTK
+  (`gdk_monitor_is_valid`) y se añaden exactamente los `added`. Probado con `hyprctl keyword monitor HDMI-A-1,disable`.
+- **`align` de los módulos custom no se veía**: la caja de `AIconLabel` lleva el nombre CSS (min-width) y la etiqueta
+  quedaba con su ancho natural al inicio. La etiqueta rellena ahora la caja y, con elipsis, la justificación se deriva
+  de `align` si no hay `justify`.
