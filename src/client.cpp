@@ -180,8 +180,9 @@ void waybar::Client::handleMonitorAdded(Glib::RefPtr<Gdk::Monitor> monitor) {
 }
 
 void waybar::Client::handleMonitorRemoved(Glib::RefPtr<Gdk::Monitor> monitor) {
-  spdlog::debug("Output removed: {} {}", monitor->get_manufacturer().c_str(),
-                monitor->get_model().c_str());
+  // A removed GdkMonitor is invalidated by GTK: its properties are gone, so log by our output name.
+  for (const auto& bar : bars)
+    if (bar->output->monitor == monitor) spdlog::debug("Output removed: {}", bar->output->name);
   /* This event can be triggered from wl_display_roundtrip called by GTK or our code.
    * Defer destruction of bars for the output to the next iteration of the event loop to avoid
    * deleting objects referenced by currently executed code.
@@ -303,11 +304,18 @@ void waybar::Client::bindInterfaces() {
   for (guint i{0}; i < monitors_->get_n_items(); ++i)
     handleMonitorAdded(std::dynamic_pointer_cast<Gdk::Monitor>(monitors_->get_object(i)));
   monitors_->signal_items_changed().connect(
-      [=, this](const guint& position, const guint& removed, const guint& added) {
-        for (auto i{removed}; i >= 0; --i)
-          handleMonitorRemoved(
-              std::dynamic_pointer_cast<Gdk::Monitor>(monitors_->get_object(position + i)));
-        for (auto i{added}; i >= 0; ++i)
+      [this](guint position, guint removed, guint added) {
+        /* Removed monitors are no longer in the model (get_object would return null), and the
+         * unsigned counters never reach -1: drop the bars whose GdkMonitor GTK has invalidated,
+         * and add exactly the `added` monitors now at `position`. */
+        if (removed > 0) {
+          std::vector<Glib::RefPtr<Gdk::Monitor>> gone;
+          for (const auto& bar : bars)
+            if (bar->output->monitor && !gdk_monitor_is_valid(bar->output->monitor->gobj()))
+              gone.push_back(bar->output->monitor);
+          for (const auto& monitor : gone) handleMonitorRemoved(monitor);
+        }
+        for (guint i = 0; i < added; ++i)
           handleMonitorAdded(
               std::dynamic_pointer_cast<Gdk::Monitor>(monitors_->get_object(position + i)));
       });
