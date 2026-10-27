@@ -67,6 +67,10 @@ AIconLabel::AIconLabel(const Json::Value& config, const std::string& name, const
    * label or the image would never reach them. Let the box be the only target. */
   label_.set_can_target(false);
   image_.set_can_target(false);
+  /* ALabel bound the click/scroll/motion controllers while the module's widget was still the
+   * label: move them to the box, now that it is the module's widget and the only event target. */
+  AModule::unBindEvents();
+  AModule::bindEvents(*this);
 }
 
 std::tuple<std::string, std::string> AIconLabel::extractIcon(const std::string& input) {

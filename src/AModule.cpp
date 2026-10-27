@@ -258,6 +258,8 @@ void AModule::handleRelease(int n_press, double x, double y) {
 void AModule::handleClickEvent(uint n_button, int n_press, double x, double y,
                                Gdk::Event::Type n_evtype) {
   std::string format{};
+  spdlog::debug("click: module {} button {} n_press {} {} at {:.0f},{:.0f}", name_, n_button, n_press,
+                n_evtype == Gdk::Event::Type::BUTTON_PRESS ? "press" : "release", x, y);
   const std::map<std::tuple<uint, int, Gdk::Event::Type>, std::string>::const_iterator& rec{
       eventMap_.find(std::tuple(n_button, n_press, n_evtype))};
   if (rec != eventMap_.cend()) {
