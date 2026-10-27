@@ -109,8 +109,23 @@ bool ALabel::setTooltipMarkup(const Glib::ustring& markup) {
     return false;
   }
 
-  label_.set_tooltip_markup(markup);
   last_tooltip_markup_ = markup.raw();
+  // w_ is the module's event target: the label for a plain ALabel, the box for an AIconLabel
+  // (set in its constructor, so it is final by the time a module updates).
+  if (!tooltip_query_connected_) {
+    w_->signal_query_tooltip().connect(sigc::mem_fun(*this, &ALabel::onQueryTooltip), false);
+    tooltip_query_connected_ = true;
+  }
+  // set_has_tooltip() only flips a flag: no re-query, so a visible tooltip stays up.
+  w_->set_has_tooltip(!markup.empty());
+  return true;
+}
+
+bool ALabel::onQueryTooltip(int, int, bool, const Glib::RefPtr<Gtk::Tooltip>& tooltip) {
+  if (!last_tooltip_markup_ || last_tooltip_markup_->empty()) {
+    return false;
+  }
+  tooltip->set_markup(*last_tooltip_markup_);
   return true;
 }
 
