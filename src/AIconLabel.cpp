@@ -59,6 +59,10 @@ AIconLabel::AIconLabel(const Json::Value& config, const std::string& name, const
     box_.append(label_);
     box_.append(image_);
   }
+  /* The box carries the CSS name (min-width, padding): let the label fill it so that the
+   * module's "align" (xalign) positions the text inside, as the GTK3 label did. */
+  label_.set_hexpand(true);
+  label_.set_halign(Gtk::Align::FILL);
 }
 
 std::tuple<std::string, std::string> AIconLabel::extractIcon(const std::string& input) {

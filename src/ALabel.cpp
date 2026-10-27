@@ -70,6 +70,16 @@ ALabel::ALabel(const Json::Value& config, const std::string& name, const std::st
     }
   }
 
+  if (config_["align"].isDouble() && !config_["justify"].isString() &&
+      label_.get_ellipsize() != Pango::EllipsizeMode::NONE) {
+    /* GTK4 lays an ellipsized label out over its whole width, so the text position inside comes
+     * from the justification, not from xalign: derive it from "align" (GTK3 centred it). */
+    auto align = config_["align"].asFloat();
+    label_.set_justify(align < 0.34f   ? Gtk::Justification::LEFT
+                       : align > 0.66f ? Gtk::Justification::RIGHT
+                                       : Gtk::Justification::CENTER);
+  }
+
   if (config_["justify"].isString()) {
     auto justify_str = config_["justify"].asString();
     if (justify_str == "left") {
