@@ -95,7 +95,10 @@ ALabel::ALabel(const Json::Value& config, const std::string& name, const std::st
 }
 
 bool ALabel::setLabelMarkup(const Glib::ustring& markup) {
-  if (last_label_markup_ == markup.raw()) {
+  // Skip only when the label still shows that markup: AIconLabel strips an embedded icon
+  // (\0icon\1f<path>\n) out of the label after each update, so an unchanged markup must be
+  // set again or the next update finds no icon and hides the image.
+  if (last_label_markup_ == markup.raw() && label_.get_label().raw() == markup.raw()) {
     return false;
   }
 
