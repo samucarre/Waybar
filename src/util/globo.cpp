@@ -41,8 +41,13 @@ int Globo::gap(Gtk::Widget& w) {
   if (root == nullptr) return 0;
   graphene_rect_t b;
   if (!gtk_widget_compute_bounds(w.gobj(), GTK_WIDGET(root), &b)) return 0;
-  const int h = gtk_widget_get_height(GTK_WIDGET(root)) - static_cast<int>(std::lround(b.origin.y + b.size.height));
-  return h > 0 ? h : 0;
+  int h = gtk_widget_get_height(GTK_WIDGET(root)) - static_cast<int>(std::lround(b.origin.y + b.size.height));
+  if (h < 0) h = 0;
+  // Climb over the bar's bottom border (its "line", when the CSS draws one): the popup's own outline carries that
+  // line on around itself instead of the bar's line cutting across the top of the popup.
+  GtkBorder border;
+  gtk_style_context_get_border(gtk_widget_get_style_context(GTK_WIDGET(root)), &border);
+  return h - border.bottom;
 }
 
 void Globo::enter() {
@@ -80,9 +85,31 @@ void Globo::refresh() {
   }
 }
 
+bool Globo::pointerInside() const {
+  // GTK re-sends an "enter" to the widget under the pointer's LAST position in the bar when a popup (a module menu)
+  // releases its grab, although the pointer has long moved elsewhere; a tooltip shown on that stale enter would stay
+  // on screen with nothing to take it away. So a tooltip only shows if the pointer really is over the widget now.
+  GtkWidget* w = anchor_.gobj();
+  GtkNative* native = gtk_widget_get_native(w);
+  GdkSurface* surface = native != nullptr ? gtk_native_get_surface(native) : nullptr;
+  GdkSeat* seat = gdk_display_get_default_seat(gtk_widget_get_display(w));
+  GdkDevice* pointer = seat != nullptr ? gdk_seat_get_pointer(seat) : nullptr;
+  if (surface == nullptr || pointer == nullptr) return true;  // unknown: trust the crossing events
+  double sx = 0, sy = 0;
+  GdkModifierType mask;
+  if (!gdk_surface_get_device_position(surface, pointer, &sx, &sy, &mask)) return false;  // not over the bar
+  double nx = 0, ny = 0;
+  gtk_native_get_surface_transform(native, &nx, &ny);
+  graphene_point_t p = GRAPHENE_POINT_INIT(static_cast<float>(sx - nx), static_cast<float>(sy - ny));
+  graphene_point_t out;
+  if (!gtk_widget_compute_point(GTK_WIDGET(native), w, &p, &out)) return true;
+  return gtk_widget_contains(w, out.x, out.y);
+}
+
 void Globo::show() {
   const auto text = markup_();
   if (text.empty()) return;
+  if (!pointerInside()) return;
   if (!pop_) {
     pop_ = std::make_unique<Gtk::Popover>();
     pop_->set_parent(anchor_);

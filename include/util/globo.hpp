@@ -21,12 +21,14 @@ class Globo : public sigc::trackable {
   void leave();    // pointer left: cancel and hide
   void hide();     // hide now (click, destruction)
   void refresh();  // the text changed: update the popup if it is visible
-  // Pixels between the bottom edge of `w` and the bottom edge of its window.
+  // Pixels between the bottom edge of `w` and the bottom edge of its window, minus the window's bottom border:
+  // a popup offset by this hangs from the bar's edge and covers the bar's border line.
   static int gap(Gtk::Widget& w);
   Gtk::Widget& anchor() const { return anchor_; }
 
  private:
   void show();
+  bool pointerInside() const;  // is the pointer really over the anchor right now?
   Gtk::Widget& anchor_;
   std::function<Glib::ustring()> markup_;
   std::unique_ptr<Gtk::Popover> pop_;
