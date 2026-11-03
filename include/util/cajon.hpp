@@ -34,6 +34,7 @@ class Cajon : public Base {
     }
     escala_ = 0.12;
     t0_ = 0;
+    tPrev_ = 0;
     spdlog::debug("cajon: abrir ({})", G_OBJECT_TYPE_NAME(this->gobj()));
     if (tick_ != 0) this->remove_tick_callback(tick_);
     tick_ = this->add_tick_callback(
@@ -86,7 +87,14 @@ class Cajon : public Base {
 
   bool anima(const Glib::RefPtr<Gdk::FrameClock>& clock) {
     const gint64 t = clock->get_frame_time();
-    if (t0_ == 0) t0_ = t;
+    if (t0_ == 0) {
+      t0_ = t;
+      tPrev_ = t;
+    }
+    // A main-loop stall (> 80 ms between ticks) shifts the origin: the drawer carries on from where it was instead
+    // of jumping to the end with no frame in between (same rule as the bar's panels and the notification center).
+    if (t - tPrev_ > 80000) t0_ += (t - tPrev_) - 16000;
+    tPrev_ = t;
     const double p = static_cast<double>(t - t0_) / 1e6 / DURACION;
     escala_ = escalaSuave(p);
     this->queue_draw();
@@ -100,6 +108,7 @@ class Cajon : public Base {
 
   double escala_ = 1.0;
   gint64 t0_ = 0;
+  gint64 tPrev_ = 0;
   guint tick_ = 0;
 };
 
