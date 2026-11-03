@@ -56,6 +56,9 @@ class Cajon : public Base {
 
  private:
   static constexpr double DURACION = 0.7;  // s
+  // peak of the first leg: 1.0 = no overshoot (3-nov-2026, Samuel: the panels' 5 % bounce had to go; same in
+  // perfilado.py and swaync's cajon.vala)
+  static constexpr double PICO = 1.0;
 
   static bool animaciones() {
     auto settings = Gtk::Settings::get_default();
@@ -78,11 +81,11 @@ class Cajon : public Base {
     return cy(t);
   }
 
-  // scaleY 0.12 → 1.05 → 1, the two legs of the "suave" bounce (p = progress 0..1)
+  // scaleY 0.12 → PICO → 1, the two legs of the "suave" curve (p = progress 0..1)
   static double escalaSuave(double p) {
     if (p >= 1) return 1.0;
-    if (p < 0.6) return 0.12 + (1.05 - 0.12) * bezier(p / 0.6, .33, .9, .35, 1);
-    return 1.05 + (1.0 - 1.05) * bezier((p - 0.6) / 0.4, .33, .9, .35, 1);
+    if (p < 0.6) return 0.12 + (PICO - 0.12) * bezier(p / 0.6, .33, .9, .35, 1);
+    return PICO + (1.0 - PICO) * bezier((p - 0.6) / 0.4, .33, .9, .35, 1);
   }
 
   bool anima(const Glib::RefPtr<Gdk::FrameClock>& clock) {
