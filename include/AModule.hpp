@@ -12,6 +12,7 @@
 
 #include "IModule.hpp"
 #include "util/SafeSignal.hpp"
+#include "util/cajon.hpp"
 #include "util/globo.hpp"
 
 namespace waybar {
@@ -61,8 +62,7 @@ class AModule : public IModule {
   Glib::RefPtr<Gtk::EventControllerScroll> controller_scroll_;
   Glib::RefPtr<Gtk::EventControllerMotion> controller_motion_;
   // "menu"/"menu-file"/"menu-actions": popover menu built from the GTK3-style menu-file (GtkMenu/GtkMenuItem)
-  std::unique_ptr<Gtk::PopoverMenu> menu_;
-  Glib::RefPtr<Gio::SimpleActionGroup> menuActions_;
+  std::unique_ptr<util::Cajon<Gtk::Popover>> menu_;  // menu-file popover: a column of buttons; opens as an elastic drawer
   void makeMenu();
   bool disable_on_sleep_{false};
   // The bar's own tooltip (util::Globo) for the module widget, created by bindEvents() unless "tooltip": false.

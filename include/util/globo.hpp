@@ -3,6 +3,8 @@
 #include <gtkmm.h>
 #include <sigc++/sigc++.h>
 
+#include "util/cajon.hpp"
+
 #include <chrono>
 #include <functional>
 #include <memory>
@@ -31,7 +33,7 @@ class Globo : public sigc::trackable {
   bool pointerInside() const;  // is the pointer really over the anchor right now?
   Gtk::Widget& anchor_;
   std::function<Glib::ustring()> markup_;
-  std::unique_ptr<Gtk::Popover> pop_;
+  std::unique_ptr<Cajon<Gtk::Popover>> pop_;  // opens as an elastic drawer (util::Cajon)
   Gtk::Label label_;
   sigc::connection timer_;
   sigc::connection destroy_conn_;

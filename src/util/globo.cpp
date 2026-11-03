@@ -118,7 +118,7 @@ void Globo::show() {
   if (text.empty()) return;
   if (!pointerInside()) return;
   if (!pop_) {
-    pop_ = std::make_unique<Gtk::Popover>();
+    pop_ = std::make_unique<Cajon<Gtk::Popover>>("WaybarGloboPopover");
     pop_->set_parent(anchor_);
     pop_->set_has_arrow(false);
     pop_->set_autohide(false);
@@ -144,6 +144,7 @@ void Globo::show() {
   label_.set_markup(text);
   pop_->set_offset(0, gap(anchor_));
   pop_->popup();
+  pop_->abrir();
 }
 
 }  // namespace waybar::util

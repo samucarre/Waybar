@@ -90,10 +90,16 @@ AModule::AModule(const Json::Value& config, const std::string& name, const std::
 
 namespace {
 // Reads a GTK3 GtkBuilder menu file (GtkMenu with GtkMenuItem / GtkSeparatorMenuItem children, as documented for
-// the "menu-file" option) and turns it into a flat list of (id, label) entries; a separator is an entry with empty id.
+// the "menu-file" option) and turns it into a flat list of entries; a separator is an entry with empty id. A
+// GtkMenuItem with <property name="sensitive">False</property> is a heading (shown, not clickable).
+struct MenuEntry {
+  std::string id;
+  std::string label;
+  bool sensitive{true};
+};
 class MenuFileParser : public Glib::Markup::Parser {
  public:
-  std::vector<std::pair<std::string, std::string>> entries;
+  std::vector<MenuEntry> entries;
 
  protected:
   void on_start_element(Glib::Markup::ParseContext&, const Glib::ustring& element,
@@ -105,31 +111,43 @@ class MenuFileParser : public Glib::Markup::Parser {
         inItem_ = true;
         itemId_ = id != attributes.end() ? std::string(id->second) : "";
         itemLabel_.clear();
+        itemSensitive_ = true;
       } else if (cls != attributes.end() && cls->second == "GtkSeparatorMenuItem") {
-        entries.emplace_back("", "");
+        entries.push_back({"", "", true});
       }
     } else if (element == "property" && inItem_) {
       const auto name = attributes.find("name");
       inLabel_ = name != attributes.end() && name->second == "label";
+      inSensitive_ = name != attributes.end() && name->second == "sensitive";
+      sensitiveText_.clear();
     }
   }
   void on_end_element(Glib::Markup::ParseContext&, const Glib::ustring& element) override {
     if (element == "property") {
+      if (inSensitive_) {
+        const auto t = Glib::ustring(sensitiveText_).lowercase();
+        itemSensitive_ = !(t == "false" || t == "0" || t == "no");
+      }
       inLabel_ = false;
+      inSensitive_ = false;
     } else if (element == "object" && inItem_) {
       inItem_ = false;
-      if (!itemId_.empty()) entries.emplace_back(itemId_, itemLabel_);
+      if (!itemId_.empty()) entries.push_back({itemId_, itemLabel_, itemSensitive_});
     }
   }
   void on_text(Glib::Markup::ParseContext&, const Glib::ustring& text) override {
     if (inLabel_) itemLabel_ += text;
+    if (inSensitive_) sensitiveText_ += text;
   }
 
  private:
   bool inItem_{false};
   bool inLabel_{false};
+  bool inSensitive_{false};
+  bool itemSensitive_{true};
   std::string itemId_;
   std::string itemLabel_;
+  std::string sensitiveText_;
 };
 }  // namespace
 
@@ -156,29 +174,37 @@ void AModule::makeMenu() {
     spdlog::warn("Module {}: menu-file {} has no GtkMenuItem entries", name_, file);
     return;
   }
-  menuActions_ = Gio::SimpleActionGroup::create();
-  auto model = Gio::Menu::create();
-  auto section = Gio::Menu::create();
-  for (const auto& [id, label] : parser.entries) {
-    if (id.empty()) {
-      if (section->get_n_items() > 0) {
-        model->append_section(section);
-        section = Gio::Menu::create();
-      }
+  // A plain popover of our own (util::Cajon<Gtk::Popover>: gtkmm registers a derived type for it, so it can draw
+  // itself as the elastic drawer) holding a column of flat buttons, one per entry, and separators. A
+  // Gtk::PopoverMenu would look the same but gtkmm wraps the C object as a plain GtkPopoverMenu and the drawer
+  // animation never gets to draw (3-nov-2026).
+  menu_ = std::make_unique<util::Cajon<Gtk::Popover>>("WaybarCajonMenu");
+  menu_->add_css_class("menu");  // style.css: popover.menu > contents, popover.menu button.elemento, separator
+  auto* caja = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL);
+  for (const auto& entry : parser.entries) {
+    if (entry.id.empty()) {
+      caja->append(*Gtk::make_managed<Gtk::Separator>(Gtk::Orientation::HORIZONTAL));
       continue;
     }
-    section->append(label, "menu." + id);
-    menuActions_->add_action(id, [this, id]() {
+    auto* boton = Gtk::make_managed<Gtk::Button>();
+    auto* etiqueta = Gtk::make_managed<Gtk::Label>(entry.label);
+    etiqueta->set_xalign(0.0F);
+    boton->set_child(*etiqueta);
+    boton->add_css_class("flat");
+    boton->add_css_class("elemento");
+    boton->set_sensitive(entry.sensitive);
+    const std::string id = entry.id;
+    boton->signal_clicked().connect([this, id]() {
+      if (menu_) menu_->popdown();
       if (config_["menu-actions"][id].isString()) {
         pid_children_.push_back(util::command::forkExec(config_["menu-actions"][id].asString()));
       } else {
         spdlog::warn("Module {}: no menu-actions entry for menu item {}", name_, id);
       }
     });
+    caja->append(*boton);
   }
-  if (section->get_n_items() > 0) model->append_section(section);
-  w_->insert_action_group("menu", menuActions_);
-  menu_ = std::make_unique<Gtk::PopoverMenu>(model);
+  menu_->set_child(*caja);
   menu_->set_parent(*w_);
   menu_->set_has_arrow(false);
   menu_->set_position(Gtk::PositionType::BOTTOM);
@@ -282,6 +308,7 @@ void AModule::handleClickEvent(uint n_button, int n_press, double x, double y,
       // hang the menu from the bar's bottom edge, not from the widget's
       menu_->set_offset(0, util::Globo::gap(*w_));
       menu_->popup();
+      menu_->abrir();
     }
   }
   // Second call user scripts
