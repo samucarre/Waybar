@@ -2,6 +2,8 @@
 
 #include <gtk/gtk.h>
 
+#include <spdlog/spdlog.h>
+
 #include <cmath>
 
 namespace waybar::util {
@@ -41,16 +43,15 @@ int Globo::gap(Gtk::Widget& w) {
   if (root == nullptr) return 0;
   graphene_rect_t b;
   if (!gtk_widget_compute_bounds(w.gobj(), GTK_WIDGET(root), &b)) return 0;
-  int h = gtk_widget_get_height(GTK_WIDGET(root)) - static_cast<int>(std::lround(b.origin.y + b.size.height));
-  if (h < 0) h = 0;
-  // Climb over the bar's bottom border (its "line", when the CSS draws one): the popup's own outline carries that
-  // line on around itself instead of the bar's line cutting across the top of the popup.
-  GtkBorder border;
-  gtk_style_context_get_border(gtk_widget_get_style_context(GTK_WIDGET(root)), &border);
-  return h - border.bottom;
+  // The root's height is its CONTENT height (GTK4), which already stops above the bar's bottom border: a popup
+  // offset by this gap starts right over the border line (the bar's "line"), so the popup's own outline can carry
+  // the line on around itself. Subtracting the border here again put the popups 2 px too high (3-nov-2026).
+  const int h = gtk_widget_get_height(GTK_WIDGET(root)) - static_cast<int>(std::lround(b.origin.y + b.size.height));
+  return h > 0 ? h : 0;
 }
 
 void Globo::enter() {
+  spdlog::debug("globo: enter");
   timer_.disconnect();
   // GTK's tooltip timings: 500 ms, or 60 ms in "browse mode" right after another tooltip closed
   const bool browse = std::chrono::steady_clock::now() - lastHide_ < std::chrono::milliseconds(500);
@@ -63,6 +64,7 @@ void Globo::enter() {
 }
 
 void Globo::leave() {
+  spdlog::debug("globo: leave");
   timer_.disconnect();
   hide();
 }
@@ -97,13 +99,18 @@ bool Globo::pointerInside() const {
   if (surface == nullptr || pointer == nullptr) return true;  // unknown: trust the crossing events
   double sx = 0, sy = 0;
   GdkModifierType mask;
-  if (!gdk_surface_get_device_position(surface, pointer, &sx, &sy, &mask)) return false;  // not over the bar
+  const bool over = gdk_surface_get_device_position(surface, pointer, &sx, &sy, &mask);
   double nx = 0, ny = 0;
   gtk_native_get_surface_transform(native, &nx, &ny);
   graphene_point_t p = GRAPHENE_POINT_INIT(static_cast<float>(sx - nx), static_cast<float>(sy - ny));
-  graphene_point_t out;
-  if (!gtk_widget_compute_point(GTK_WIDGET(native), w, &p, &out)) return true;
-  return gtk_widget_contains(w, out.x, out.y);
+  graphene_point_t out = GRAPHENE_POINT_INIT(0, 0);
+  const bool computed = gtk_widget_compute_point(GTK_WIDGET(native), w, &p, &out);
+  const bool inside = computed && gtk_widget_contains(w, out.x, out.y);
+  spdlog::debug("globo: over={} pos=({:.1f},{:.1f}) transform=({:.1f},{:.1f}) computed={} local=({:.1f},{:.1f}) inside={}",
+                over, sx, sy, nx, ny, computed, out.x, out.y, inside);
+  if (!over) return false;  // not over the bar
+  if (!computed) return true;
+  return inside;
 }
 
 void Globo::show() {

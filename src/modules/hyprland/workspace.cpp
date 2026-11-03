@@ -72,6 +72,10 @@ Workspace::Workspace(const Json::Value& workspace_data, Workspaces& workspace_ma
   controller_motion->signal_leave().connect(sigc::mem_fun(*this, &Workspace::handleLeave));
   m_button_.add_controller(controller_motion);
 
+  // the bar's own tooltip instead of GTK's (3-nov-2026): the text set with set_tooltip_text() stays in the button
+  m_globo_ = std::make_unique<util::Globo>(
+      m_button_, [this] { return Glib::Markup::escape_text(m_button_.get_tooltip_text()); });
+
   m_button_.add_css_class("flat");
   if (m_workspaceManager_.enableTaskbar()) {
     m_content_.set_orientation(m_workspaceManager_.taskbarOrientation());
@@ -113,11 +117,16 @@ std::optional<WindowRepr> Workspace::closeWindow(WindowAddress const& addr) {
 
 void Workspace::handleEnter(double x, double y) {
   m_button_.get_style_context()->add_class("workspace-hover");
+  if (m_globo_) m_globo_->enter();
 }
 
-void Workspace::handleLeave() { m_button_.get_style_context()->remove_class("workspace-hover"); }
+void Workspace::handleLeave() {
+  m_button_.get_style_context()->remove_class("workspace-hover");
+  if (m_globo_) m_globo_->leave();
+}
 
 void Workspace::handlePress(int n_press, double x, double y) {
+  if (m_globo_) m_globo_->hide();
   try {
     if (id() > 0) {  // normal
       if (m_workspaceManager_.moveToMonitor()) {
@@ -407,6 +416,7 @@ void Workspace::doUpdate(const std::string& workspace_icon, const std::string& w
     m_button_.set_tooltip_text(
         fmt::format(fmt::runtime(workspace_tooltip), fmt::arg("id", id()), fmt::arg("name", name()),
                     fmt::arg("icon", workspace_icon), fmt::arg("windows", windows)));
+    if (m_globo_) m_globo_->refresh();
   }
 
   auto formatBefore = m_workspaceManager_.formatBefore();

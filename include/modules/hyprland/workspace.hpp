@@ -20,6 +20,7 @@
 #include "modules/hyprland/backend.hpp"
 #include "modules/hyprland/windowcreationpayload.hpp"
 #include "util/enum.hpp"
+#include "util/globo.hpp"
 #include "util/regex_collection.hpp"
 
 using WindowAddress = std::string;
@@ -99,6 +100,9 @@ class Workspace {
   Gtk::Box m_content_;
   Gtk::Label m_labelBefore_;
   Gtk::Label m_labelAfter_;
+  // The bar's own tooltip for the button (util::Globo, hanging from the bar like the modules' ones); GTK's stays off.
+  // Declared after m_button_ so it is destroyed first (it unparents its popover from the button).
+  std::unique_ptr<util::Globo> m_globo_;
 
   IPC& m_ipc_;
 };
