@@ -82,6 +82,7 @@ Item::Item(const std::string& bn, const std::string& op, const Json::Value& conf
   motion_controller_->signal_enter().connect(sigc::mem_fun(*this, &Item::handleMouseEnter));
   motion_controller_->signal_leave().connect(sigc::mem_fun(*this, &Item::handleMouseLeave));
   widget_.add_controller(motion_controller_);
+  globo_ = std::make_unique<util::Globo>(widget_, [this] { return widget_.get_tooltip_markup(); });
 
   cancellable_ = Gio::Cancellable::create();
 
@@ -97,9 +98,13 @@ bool Item::isReady() const { return ready_; }
 
 void Item::handleMouseEnter(double x, double y) {
   widget_.set_state_flags(Gtk::StateFlags::PRELIGHT);
+  if (globo_) globo_->enter();
 }
 
-void Item::handleMouseLeave() { widget_.unset_state_flags(Gtk::StateFlags::PRELIGHT); }
+void Item::handleMouseLeave() {
+  widget_.unset_state_flags(Gtk::StateFlags::PRELIGHT);
+  if (globo_) globo_->leave();
+}
 
 void Item::proxyReady(Glib::RefPtr<Gio::AsyncResult>& result) {
   try {
@@ -742,6 +747,7 @@ double Item::getScaledIconSize() {
 }
 
 void Item::handleClick(int n_press, double x, double y) {
+  if (globo_) globo_->hide();
   if (!proxy_) {
     return;
   }

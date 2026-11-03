@@ -12,6 +12,7 @@
 
 #include "IModule.hpp"
 #include "util/SafeSignal.hpp"
+#include "util/globo.hpp"
 
 namespace waybar {
 
@@ -64,6 +65,10 @@ class AModule : public IModule {
   Glib::RefPtr<Gio::SimpleActionGroup> menuActions_;
   void makeMenu();
   bool disable_on_sleep_{false};
+  // The bar's own tooltip (util::Globo) for the module widget, created by bindEvents() unless "tooltip": false.
+  // Modules keep setting tooltips the usual way; globoMarkup() tells the globo what to show.
+  std::unique_ptr<util::Globo> globo_;
+  virtual Glib::ustring globoMarkup() const;
 
   // --- Generic format/tooltip resolution (config-only, usable by any module,
   // ALabel-derived or not). Prefers `<key>-<state>`, then `<key>`, then default.

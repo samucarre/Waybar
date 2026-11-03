@@ -194,7 +194,8 @@ src_files += files(
     'src/util/gtk/gtk_icon.cpp',
     'src/util/command_line_stream.cpp',
     'src/util/regex_collection.cpp',
-    'src/util/rewrite_string.cpp'
+    'src/util/rewrite_string.cpp',
+    'src/util/globo.cpp'
 )
 
 # Modules

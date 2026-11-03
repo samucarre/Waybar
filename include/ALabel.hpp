@@ -32,11 +32,9 @@ class ALabel : public AModule {
   std::string default_format_;
 
   bool setLabelMarkup(const Glib::ustring& markup);
-  // Stores the markup and serves it through the module widget's query-tooltip
-  // signal. It never calls set_tooltip_markup(): in GTK4 that re-picks the
-  // widget under the pointer (without GTK_PICK_NON_TARGETABLE) and, for an
-  // AIconLabel whose label is not targetable, the pick lands on the box, which
-  // differs from the tooltip's widget, so GTK hid the tooltip on every refresh.
+  // Stores the markup for the bar's own tooltip (util::Globo, created in AModule::bindEvents),
+  // which reads it through globoMarkup(). It never calls set_tooltip_markup(): in GTK4 that
+  // re-picks the widget under the pointer and GTK hid the tooltip on every refresh.
   bool setTooltipMarkup(const Glib::ustring& markup);
 
   // resolveTooltipFormat() / resolveFormat() are inherited from AModule.
@@ -97,8 +95,7 @@ class ALabel : public AModule {
   // no collation weight, so two different icons compare equal.
   std::optional<std::string> last_label_markup_;
   std::optional<std::string> last_tooltip_markup_;
-  bool tooltip_query_connected_ = false;
-  bool onQueryTooltip(int x, int y, bool keyboard_mode, const Glib::RefPtr<Gtk::Tooltip>& tooltip);
+  Glib::ustring globoMarkup() const override;
 };
 
 }  // namespace waybar

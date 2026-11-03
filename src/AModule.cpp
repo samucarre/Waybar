@@ -182,6 +182,12 @@ void AModule::makeMenu() {
   menu_->set_parent(*w_);
   menu_->set_has_arrow(false);
   menu_->set_position(Gtk::PositionType::BOTTOM);
+  // the bar window's classes (bar name, output, position) so the CSS can tell bars apart, like the globo
+  if (auto* root = w_->get_root()) {
+    if (auto* win = dynamic_cast<Gtk::Widget*>(root)) {
+      for (const auto& c : win->get_css_classes()) menu_->add_css_class(c);
+    }
+  }
   // the popover has to be unparented before the module widget goes away
   w_->signal_destroy().connect([this]() {
     if (menu_) {
@@ -229,6 +235,7 @@ void AModule::setCursor(const Glib::RefPtr<Gdk::Cursor>& cur) {
 
 void AModule::handleMouseEnter(double x, double y) {
   this->operator Gtk::Widget&().set_state_flags(Gtk::StateFlags::PRELIGHT);
+  if (globo_) globo_->enter();
 
   // Default behavior indicating event availability
   if (hasPressEvents_ && !config_.isMember("cursor")) {
@@ -238,6 +245,7 @@ void AModule::handleMouseEnter(double x, double y) {
 
 void AModule::handleMouseLeave() {
   this->operator Gtk::Widget&().unset_state_flags(Gtk::StateFlags::PRELIGHT);
+  if (globo_) globo_->leave();
 
   // Default behavior indicating event availability
   if (hasPressEvents_ && !config_.isMember("cursor")) {
@@ -258,6 +266,7 @@ void AModule::handleRelease(int n_press, double x, double y) {
 void AModule::handleClickEvent(uint n_button, int n_press, double x, double y,
                                Gdk::Event::Type n_evtype) {
   std::string format{};
+  if (globo_) globo_->hide();
   spdlog::debug("click: module {} button {} n_press {} {} at {:.0f},{:.0f}", name_, n_button, n_press,
                 n_evtype == Gdk::Event::Type::BUTTON_PRESS ? "press" : "release", x, y);
   const std::map<std::tuple<uint, int, Gdk::Event::Type>, std::string>::const_iterator& rec{
@@ -269,7 +278,11 @@ void AModule::handleClickEvent(uint n_button, int n_press, double x, double y,
   }
   if (rec != eventMap_.cend() && config_["menu"].isString() && rec->second == config_["menu"].asString()) {
     if (!menu_) makeMenu();
-    if (menu_) menu_->popup();
+    if (menu_) {
+      // hang the menu from the bar's bottom edge, not from the widget's
+      menu_->set_offset(0, util::Globo::gap(*w_));
+      menu_->popup();
+    }
   }
   // Second call user scripts
   if (!format.empty()) {
@@ -467,7 +480,15 @@ void AModule::bindEvents(Gtk::Widget& wg) {
   if (gesture_click_) wg.add_controller(gesture_click_);
   if (controller_scroll_) wg.add_controller(controller_scroll_);
   if (controller_motion_) wg.add_controller(controller_motion_);
+
+  // The globo hangs from the widget the events are bound to. ALabel binds its label first and AIconLabel rebinds
+  // the box afterwards (the label is empty, 0 px wide, for icon-only modules), so re-anchor when the widget changes.
+  if (tooltipEnabled() && (!globo_ || &globo_->anchor() != &wg)) {
+    globo_ = std::make_unique<util::Globo>(wg, [this] { return globoMarkup(); });
+  }
 }
+
+Glib::ustring AModule::globoMarkup() const { return w_ != nullptr ? w_->get_tooltip_markup() : Glib::ustring(); }
 
 void AModule::unBindEvents() {
   removeGestureClick();

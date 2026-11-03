@@ -21,6 +21,7 @@
 #include <string_view>
 
 #include "bar.hpp"
+#include "util/globo.hpp"
 
 namespace waybar::modules::SNI {
 
@@ -131,6 +132,8 @@ class Item final : public sigc::trackable {
   Glib::RefPtr<Gtk::GestureClick> gesture_click_;
   Glib::RefPtr<Gtk::EventControllerScroll> scroll_controller_;
   Glib::RefPtr<Gtk::EventControllerMotion> motion_controller_;
+  // the bar's own tooltip for the item (declared after widget_: destroyed first, while widget_ is alive)
+  std::unique_ptr<util::Globo> globo_;
   std::set<std::string_view> update_pending_;
 
   Host& host_;

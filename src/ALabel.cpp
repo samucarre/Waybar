@@ -113,23 +113,13 @@ bool ALabel::setTooltipMarkup(const Glib::ustring& markup) {
   }
 
   last_tooltip_markup_ = markup.raw();
-  // w_ is the module's event target: the label for a plain ALabel, the box for an AIconLabel
-  // (set in its constructor, so it is final by the time a module updates).
-  if (!tooltip_query_connected_) {
-    w_->signal_query_tooltip().connect(sigc::mem_fun(*this, &ALabel::onQueryTooltip), false);
-    tooltip_query_connected_ = true;
-  }
-  // set_has_tooltip() only flips a flag: no re-query, so a visible tooltip stays up.
-  w_->set_has_tooltip(!markup.empty());
+  // shown by the bar's own tooltip (util::Globo) through globoMarkup(); live update if it is open
+  if (globo_) globo_->refresh();
   return true;
 }
 
-bool ALabel::onQueryTooltip(int, int, bool, const Glib::RefPtr<Gtk::Tooltip>& tooltip) {
-  if (!last_tooltip_markup_ || last_tooltip_markup_->empty()) {
-    return false;
-  }
-  tooltip->set_markup(*last_tooltip_markup_);
-  return true;
+Glib::ustring ALabel::globoMarkup() const {
+  return last_tooltip_markup_ ? Glib::ustring(*last_tooltip_markup_) : Glib::ustring();
 }
 
 std::string ALabel::getIcon(uint16_t percentage, const std::string& alt, uint16_t max) {
