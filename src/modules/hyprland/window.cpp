@@ -130,13 +130,19 @@ auto Window::getActiveWorkspace(const std::string& monitorName) -> Workspace {
           .last_window_title = "",
       };
     }
-    const int special_id = (*monitor)["specialWorkspace"]["id"].asInt();
+    // Hyprland 0.57 no longer sends "id" in specialWorkspace (only name/address/type), so an open special
+    // workspace is looked up by name; Hyprland <= 0.56 keeps using its (negative) id as before.
+    const auto& special = (*monitor)["specialWorkspace"];
+    const int special_id = special["id"].asInt();
+    const std::string special_name = special["name"].asString();
+    const bool special_by_name = special_id == 0 && !special_name.empty();
     const int id = special_id != 0 ? special_id : (*monitor)["activeWorkspace"]["id"].asInt();
 
     const auto workspaces = IPC::inst().getSocket1JsonReply("workspaces");
     if (workspaces.isArray()) {
-      auto workspace = std::ranges::find_if(
-          workspaces, [&](const Json::Value& workspace) { return workspace["id"] == id; });
+      auto workspace = std::ranges::find_if(workspaces, [&](const Json::Value& workspace) {
+        return special_by_name ? workspace["name"].asString() == special_name : workspace["id"] == id;
+      });
       if (workspace == std::end(workspaces)) {
         spdlog::warn("No workspace with id {}", id);
         return Workspace{
