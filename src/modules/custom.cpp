@@ -328,7 +328,8 @@ void waybar::modules::Custom::parseOutputRaw() {
         tooltip_ = validated_line;
       }
     } else if (i == 2) {
-      class_.push_back(validated_line);
+      // An empty class name is no class (GTK asserts on it at every update)
+      if (!validated_line.empty()) class_.push_back(validated_line);
     } else {
       break;
     }
@@ -367,11 +368,14 @@ void waybar::modules::Custom::parseOutputJson() {
     } else {
       tooltip_ = sanitize(parsed["tooltip"].asString());
     }
+    // An empty class name ("class": "") is no class: GTK asserts on it at every update
     if (parsed["class"].isString()) {
-      class_.push_back(sanitize(parsed["class"].asString()));
+      auto c = sanitize(parsed["class"].asString());
+      if (!c.empty()) class_.push_back(std::move(c));
     } else if (parsed["class"].isArray()) {
       for (auto const& c : parsed["class"]) {
-        class_.push_back(sanitize(c.asString()));
+        auto s = sanitize(c.asString());
+        if (!s.empty()) class_.push_back(std::move(s));
       }
     }
 
