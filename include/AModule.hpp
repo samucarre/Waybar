@@ -13,6 +13,8 @@
 
 #include "IModule.hpp"
 #include "util/coalescing_dispatcher.hpp"
+#include "util/cajon.hpp"
+#include "util/globo.hpp"
 #include "util/module_box.hpp"
 
 namespace waybar {
@@ -125,7 +127,9 @@ class AModule : public IModule {
   void setupMenu();
 
   bool disable_on_sleep_{false};
-  Gtk::PopoverMenu* menu_ = nullptr;
+  // WayBian: a plain popover of our own holding a column of buttons, opened as the bar's elastic drawer
+  // (util::Cajon; a Gtk::PopoverMenu keeps the C type and cannot draw it), hanging from the bar's edge
+  util::Cajon<Gtk::Popover>* menu_ = nullptr;
 
   // Maps a configured event name (e.g. "on-click-middle") to a built-in module
   // action name. Populated from the `actions` config section, and by modules

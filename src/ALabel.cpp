@@ -1,5 +1,7 @@
 #include "ALabel.hpp"
 
+#include "util/globo.hpp"
+
 #include <fmt/format.h>
 
 #include <algorithm>
@@ -44,41 +46,12 @@ ALabel::ALabel(const Json::Value& config, const std::string& name, const std::st
   label_.add_css_class(MODULE_CLASS);
   event_box_.set_child(label_);
   if (tooltipEnabled()) {
-    // Keep dynamic tooltip contents out of GtkWidget's tooltip-markup property.
-    // Setting that property queues a display-wide tooltip query, which restarts
-    // GTK's hover delay when modules update faster than the delay can expire.
-    label_.set_has_tooltip(true);
-    label_.signal_query_tooltip().connect(
-        [this](int, int, bool, const Glib::RefPtr<Gtk::Tooltip>& tooltip) {
-          if (!last_tooltip_markup_.has_value() || last_tooltip_markup_->empty()) {
-            active_tooltip_.reset();
-            return false;
-          }
-          active_tooltip_ = tooltip;
-          tooltip->set_markup(*last_tooltip_markup_);
-          return true;
-        },
-        true);
-    // GTK hides the tooltip on every scroll event and only shows it again once
-    // the pointer moves, so a value being scrolled (volume, brightness) cannot
-    // be read while changing it. The capture phase sees the scroll even when a
-    // handler consumes it, but before GTK's own tooltip handling, hence the idle.
-    tooltip_scroll_ = Gtk::EventControllerScroll::create();
-    tooltip_scroll_->set_flags(Gtk::EventControllerScroll::Flags::BOTH_AXES);
-    tooltip_scroll_->set_propagation_phase(Gtk::PropagationPhase::CAPTURE);
-    tooltip_scroll_->signal_scroll().connect(
-        [this](double, double) {
-          tooltip_requery_.disconnect();
-          tooltip_requery_ = Glib::signal_idle().connect([this] {
-            if (pointerOverModule()) {
-              label_.trigger_tooltip_query();
-            }
-            return false;
-          });
-          return false;
-        },
-        false);
-    event_box_.add_controller(tooltip_scroll_);
+    // WayBian: the bar's own tooltip (util::Globo) hangs from the bar's bottom edge and shows the
+    // stored markup; it is not a GTK tooltip, so neither the tooltip-markup property (each write
+    // restarts GTK's hover delay) nor scrolling (GTK hid its tooltip on every scroll) gets in the way.
+    util::attach_globo(event_box_, [this] {
+      return last_tooltip_markup_.has_value() ? Glib::ustring(*last_tooltip_markup_) : Glib::ustring();
+    });
   }
   if (config_["max-length"].isUInt()) {
     label_.set_max_width_chars(config_["max-length"].asInt());
@@ -165,13 +138,9 @@ bool ALabel::setTooltipMarkup(const Glib::ustring& markup) {
     return false;
   }
   last_tooltip_markup_ = std::move(tooltip);
-  if (active_tooltip_) {
-    // GTK shares one tooltip per display: once the pointer left, it may show another module.
-    if (pointerOverModule()) {
-      active_tooltip_->set_markup(*last_tooltip_markup_);
-    } else {
-      active_tooltip_.reset();
-    }
+  // live while it is open (a value being scrolled, a clock ticking)
+  if (auto* globo = util::find_globo(event_box_)) {
+    globo->refresh();
   }
   return true;
 }

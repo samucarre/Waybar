@@ -377,10 +377,8 @@ bool SingleImageStrategy::update() {
     image_.set_visible(true);
 
     if (hasTooltip_ && !tooltip_.empty()) {
-      // ustring::operator!= collates, which crashes on invalid UTF-8; compare bytes
-      if (box_.get_tooltip_markup().raw() != tooltip_) {
-        box_.set_tooltip_markup(tooltip_);
-      }
+      // WayBian: the bar's own tooltip (util::Globo), like the other modules
+      util::set_tooltip_markup(box_, tooltip_);
     }
 
     box_.remove_css_class("empty");

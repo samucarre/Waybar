@@ -209,7 +209,8 @@ src_files = files(
     'src/util/regex_collection.cpp',
     'src/util/css_reload_helper.cpp',
     'src/util/utf8_string.cpp',
-    'src/util/command_line_stream.cpp'
+    'src/util/command_line_stream.cpp',
+    'src/util/globo.cpp'
 )
 
 man_files = files(

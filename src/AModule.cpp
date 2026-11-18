@@ -283,128 +283,65 @@ namespace {
 
 // Converts a GTK3 GtkBuilder GtkMenu (the documented menu-file format) into a GMenu, since GTK4
 // has no GtkMenu. Every item gets an action "menu.<id>", items without an id an inert one.
-struct MenuParser {
-  struct Menu {
-    Glib::RefPtr<Gio::Menu> root = Gio::Menu::create();
-    Glib::RefPtr<Gio::Menu> section = Gio::Menu::create();
-  };
-  struct Item {
-    std::string id;
-    std::string label;
-    bool use_underline = false;
-    bool visible = true;
-    bool sensitive = true;
-    bool separator = false;
-    Glib::RefPtr<Gio::Menu> submenu;
-  };
-  // Open <object> elements, innermost last: a Menu or an Item
-  std::vector<std::variant<Menu, Item>> stack;
-  std::string property;  // name of the open <property>, if any
-  std::string text;
-  Glib::RefPtr<Gio::Menu> result;
-  std::vector<Item> items;  // every item with an id, for its sensitivity
-  bool found = false;
+// WayBian: reads a GTK3 GtkBuilder menu file (GtkMenu with GtkMenuItem / GtkSeparatorMenuItem children, as
+// documented for "menu-file") into a flat list of entries in file order; a separator is an entry with an empty
+// id. A GtkMenuItem with <property name="sensitive">False</property> is a heading (shown, not clickable).
+struct MenuEntry {
+  std::string id;
+  std::string label;
+  bool sensitive{true};
+};
+class MenuFileParser : public Glib::Markup::Parser {
+ public:
+  std::vector<MenuEntry> entries;
 
-  static Item* top_item(MenuParser& p) {
-    return p.stack.empty() ? nullptr : std::get_if<Item>(&p.stack.back());
-  }
-
-  static void start(GMarkupParseContext*, const char* element, const char** names,
-                    const char** values, gpointer data, GError**) {
-    auto& p = *static_cast<MenuParser*>(data);
-    auto attr = [&](const char* key) -> const char* {
-      for (int i = 0; names[i] != nullptr; ++i) {
-        if (strcmp(names[i], key) == 0) return values[i];
+ protected:
+  void on_start_element(Glib::Markup::ParseContext& /*context*/, const Glib::ustring& element,
+                        const AttributeMap& attributes) override {
+    if (element == "object") {
+      const auto cls = attributes.find("class");
+      const auto id = attributes.find("id");
+      if (cls != attributes.end() && cls->second == "GtkMenuItem") {
+        inItem_ = true;
+        itemId_ = id != attributes.end() ? std::string(id->second) : "";
+        itemLabel_.clear();
+        itemSensitive_ = true;
+      } else if (cls != attributes.end() && cls->second == "GtkSeparatorMenuItem") {
+        entries.push_back({"", "", true});
       }
-      return nullptr;
-    };
-    if (strcmp(element, "object") == 0) {
-      const char* cls = attr("class");
-      const char* id = attr("id");
-      std::string_view klass = cls != nullptr ? cls : "";
-      if (klass == "GtkMenu") {
-        // Outside of the "menu" object only submenus matter
-        if (p.stack.empty() && (id == nullptr || strcmp(id, "menu") != 0 || p.found)) {
-          p.stack.emplace_back(Item{.visible = false});
-          return;
-        }
-        p.found = true;
-        p.stack.emplace_back(Menu{});
-      } else {
-        Item item;
-        item.id = id != nullptr ? id : "";
-        item.separator = klass.find("Separator") != std::string_view::npos;
-        item.visible = !p.stack.empty();
-        p.stack.emplace_back(std::move(item));
-      }
-    } else if (strcmp(element, "property") == 0) {
-      const char* name = attr("name");
-      p.property = name != nullptr ? name : "";
-      std::replace(p.property.begin(), p.property.end(), '-', '_');
-      p.text.clear();
+    } else if (element == "property" && inItem_) {
+      const auto name = attributes.find("name");
+      inLabel_ = name != attributes.end() && name->second == "label";
+      inSensitive_ = name != attributes.end() && name->second == "sensitive";
+      sensitiveText_.clear();
     }
   }
-
-  static void end(GMarkupParseContext*, const char* element, gpointer data, GError**) {
-    auto& p = *static_cast<MenuParser*>(data);
-    if (strcmp(element, "property") == 0) {
-      if (auto* item = top_item(p)) {
-        auto truthy = [&] {
-          auto v = Glib::ustring(p.text).lowercase();
-          return v == "true" || v == "yes" || v == "1" || v == "t" || v == "y";
-        };
-        if (p.property == "label") item->label = p.text;
-        if (p.property == "use_underline") item->use_underline = truthy();
-        if (p.property == "visible") item->visible = item->visible && truthy();
-        if (p.property == "sensitive") item->sensitive = truthy();
+  void on_end_element(Glib::Markup::ParseContext& /*context*/, const Glib::ustring& element) override {
+    if (element == "property") {
+      if (inSensitive_) {
+        const auto v = Glib::ustring(sensitiveText_).lowercase();
+        itemSensitive_ = !(v == "false" || v == "0" || v == "no");
       }
-      p.property.clear();
-      return;
+      inLabel_ = false;
+      inSensitive_ = false;
+    } else if (element == "object" && inItem_) {
+      inItem_ = false;
+      if (!itemId_.empty()) entries.push_back({itemId_, itemLabel_, itemSensitive_});
     }
-    if (strcmp(element, "object") != 0 || p.stack.empty()) return;
-    auto node = std::move(p.stack.back());
-    p.stack.pop_back();
-    if (auto* menu = std::get_if<Menu>(&node)) {
-      if (menu->section->get_n_items() > 0) menu->root->append_section(menu->section);
-      if (auto* parent = top_item(p)) {
-        parent->submenu = menu->root;
-      } else if (p.stack.empty()) {
-        p.result = menu->root;
-      }
-      return;
-    }
-    auto& item = std::get<Item>(node);
-    auto* menu = p.stack.empty() ? nullptr : std::get_if<Menu>(&p.stack.back());
-    if (menu == nullptr || !item.visible) return;
-    if (item.separator) {
-      if (menu->section->get_n_items() > 0) {
-        menu->root->append_section(menu->section);
-        menu->section = Gio::Menu::create();
-      }
-      return;
-    }
-    // GMenu labels always use mnemonics: escape the underscores GTK3 showed as is
-    std::string label = item.label;
-    if (!item.use_underline) {
-      for (size_t pos = 0; (pos = label.find('_', pos)) != std::string::npos; pos += 2) {
-        label.insert(pos, 1, '_');
-      }
-    }
-    auto entry = Gio::MenuItem::create(label, "");
-    if (item.submenu) {
-      entry->set_submenu(item.submenu);
-    } else {
-      entry->set_detailed_action(
-          item.id.empty() || !Gio::Action::name_is_valid(item.id) ? "menu.-" : "menu." + item.id);
-      if (!item.id.empty()) p.items.push_back(item);
-    }
-    menu->section->append_item(entry);
+  }
+  void on_text(Glib::Markup::ParseContext& /*context*/, const Glib::ustring& text) override {
+    if (inLabel_) itemLabel_ += text;
+    if (inSensitive_) sensitiveText_ += text;
   }
 
-  static void on_text(GMarkupParseContext*, const char* text, gsize len, gpointer data, GError**) {
-    auto& p = *static_cast<MenuParser*>(data);
-    if (!p.property.empty()) p.text.append(text, len);
-  }
+ private:
+  bool inItem_{false};
+  bool inLabel_{false};
+  bool inSensitive_{false};
+  bool itemSensitive_{true};
+  std::string itemId_;
+  std::string itemLabel_;
+  std::string sensitiveText_;
 };
 
 }  // namespace
@@ -428,53 +365,54 @@ void AModule::setupMenu() {
     std::stringstream content;
     content << file.rdbuf();
 
-    MenuParser parser;
-    static const GMarkupParser callbacks{.start_element = MenuParser::start,
-                                         .end_element = MenuParser::end,
-                                         .text = MenuParser::on_text};
-    auto* ctx =
-        g_markup_parse_context_new(&callbacks, G_MARKUP_TREAT_CDATA_AS_TEXT, &parser, nullptr);
-    GError* error = nullptr;
-    const auto& xml = content.str();
-    bool ok = g_markup_parse_context_parse(ctx, xml.data(), xml.size(), &error) != 0 &&
-              g_markup_parse_context_end_parse(ctx, &error) != 0;
-    g_markup_parse_context_free(ctx);
-    if (!ok) {
-      std::string message = error != nullptr ? error->message : "";
-      g_clear_error(&error);
-      throw std::runtime_error("Error found in the file " + menuFile + ": " + message);
+    MenuFileParser parser;
+    try {
+      Glib::Markup::ParseContext context{parser};
+      context.parse(content.str());
+      context.end_parse();
+    } catch (const Glib::Error& e) {
+      throw std::runtime_error("Error found in the file " + menuFile + ": " + std::string(e.what()));
     }
-    if (!parser.result) {
-      throw std::runtime_error("Failed to get 'menu' object from GtkBuilder");
-    }
-
-    auto actions = Gio::SimpleActionGroup::create();
-    actions->add_action("-");
-    for (const auto& item : parser.items) {
-      if (actions->lookup_action(item.id)) {
-        continue;
-      }
-      const auto& command = config_["menu-actions"][item.id];
-      auto action = actions->add_action(
-          item.id, [cmd = command.isString() ? command.asString() : std::string()] {
-            if (!cmd.empty()) {
-              waybar::util::command::forkExec(cmd, "GtkMenu");
-            }
-          });
-      action->set_enabled(item.sensitive);
+    if (parser.entries.empty()) {
+      throw std::runtime_error("No GtkMenuItem entries in " + menuFile);
     }
     for (auto it = config_["menu-actions"].begin(); it != config_["menu-actions"].end(); ++it) {
-      if (!actions->lookup_action(it.key().asString())) {
-        spdlog::warn("Menu item '{}' not found in builder file", it.key().asString());
+      const auto key = it.key().asString();
+      if (std::none_of(parser.entries.begin(), parser.entries.end(),
+                       [&key](const auto& entry) { return entry.id == key; })) {
+        spdlog::warn("Menu item '{}' not found in builder file", key);
       }
     }
-    event_box_.insert_action_group("menu", actions);
 
-    menu_ = new Gtk::PopoverMenu(parser.result);
-    menu_->signal_map().connect(
-        [this] { util::update_menu_items(GTK_WIDGET(menu_->gobj()), false); });
+    menu_ = new util::Cajon<Gtk::Popover>("WaybarCajonMenu");
+    menu_->add_css_class("menu");  // style.css: popover.menu > contents, popover.menu button.elemento
+    auto* caja = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL);
+    for (const auto& entry : parser.entries) {
+      if (entry.id.empty()) {
+        caja->append(*Gtk::make_managed<Gtk::Separator>(Gtk::Orientation::HORIZONTAL));
+        continue;
+      }
+      auto* boton = Gtk::make_managed<Gtk::Button>();
+      auto* etiqueta = Gtk::make_managed<Gtk::Label>(entry.label);
+      etiqueta->set_xalign(0.0F);
+      boton->set_child(*etiqueta);
+      boton->add_css_class("flat");
+      boton->add_css_class("elemento");
+      boton->set_sensitive(entry.sensitive);
+      boton->signal_clicked().connect([this, id = entry.id] {
+        menu_->popdown();
+        const auto& command = config_["menu-actions"][id];
+        if (command.isString()) {
+          waybar::util::command::forkExec(command.asString(), "GtkMenu");
+        } else {
+          spdlog::warn("Module {}: no menu-actions entry for menu item {}", name_, id);
+        }
+      });
+      caja->append(*boton);
+    }
+    menu_->set_child(*caja);
     menu_->set_has_arrow(false);
-    menu_->set_halign(Gtk::Align::START);
+    menu_->set_position(Gtk::PositionType::BOTTOM);
     menu_->set_parent(event_box_);
     util::unhover_menu_ancestors(GTK_WIDGET(menu_->gobj()));
   } catch (std::runtime_error& e) {
@@ -512,8 +450,15 @@ bool AModule::handleUserEvent(const ButtonEvent& e) {
   if (config_["menu"].isString()) {
     // Check if the event is the one specified for the "menu" option
     if (rec->second == config_["menu"].asString() && menu_ != nullptr) {
-      menu_->set_pointing_to(Gdk::Rectangle(static_cast<int>(e.x), static_cast<int>(e.y), 1, 1));
+      // WayBian: under the module, hanging from the bar's bottom edge, with the bar window's classes
+      // (bar name, output, position) so style.css can tell the bars apart, like the globo
+      if (auto* root = dynamic_cast<Gtk::Widget*>(event_box_.get_root())) {
+        for (const auto& cls : root->get_css_classes()) menu_->add_css_class(cls);
+      }
+      if (auto* globo = util::find_globo(event_box_)) globo->hide();
+      menu_->set_offset(0, util::Globo::gap(event_box_));
       menu_->popup();
+      menu_->abrir();
       handled = true;
     }
   }

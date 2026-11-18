@@ -13,6 +13,8 @@
 #include <string>
 #include <vector>
 
+#include "util/globo.hpp"
+
 namespace waybar::util {
 
 // GDK crashes on a tooltip window over 32767 px on a side and Pango lays out some text in quadratic
@@ -96,16 +98,8 @@ inline void set_tooltip_markup(Gtk::Widget& widget, const Glib::ustring& markup)
     label->set_wrap(true);
     label->set_max_width_chars(70);
     widget.set_data(key, label, [](void* data) { delete static_cast<Gtk::Label*>(data); });
-    widget.set_has_tooltip(true);
-    widget.signal_query_tooltip().connect(
-        [label](int, int, bool, const Glib::RefPtr<Gtk::Tooltip>& tooltip) {
-          if (*gtk_label_get_label(label->gobj()) == '\0') {
-            return false;
-          }
-          tooltip->set_custom(*label);
-          return true;
-        },
-        true);
+    // WayBian: shown by the bar's own tooltip (util::Globo), hanging from the bar's bottom edge
+    attach_globo(widget, [label] { return Glib::ustring(gtk_label_get_label(label->gobj())); });
   }
 
   const char* const current = gtk_label_get_label(label->gobj());
@@ -116,6 +110,9 @@ inline void set_tooltip_markup(Gtk::Widget& widget, const Glib::ustring& markup)
   limit_tooltip_markup(tooltip);
   if (tooltip != current) {
     label->set_markup(tooltip);
+    if (auto* globo = find_globo(widget)) {
+      globo->refresh();
+    }
   }
 }
 

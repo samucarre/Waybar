@@ -1,5 +1,7 @@
 #include "modules/clock.hpp"
 
+#include "util/globo.hpp"
+
 #include <glib.h>
 #include <gtkmm/tooltip.h>
 #include <langinfo.h>
@@ -166,8 +168,8 @@ waybar::modules::Clock::Clock(const std::string& id, const Json::Value& config)
   }
 
   if (tooltipEnabled()) {
-    label_.set_has_tooltip(true);
-    label_.signal_query_tooltip().connect(sigc::mem_fun(*this, &Clock::query_tlp_cb), true);
+    // WayBian: the calendar shows in the bar's own tooltip (util::Globo), from the same label
+    util::attach_globo(event_box_, [this] { return Glib::ustring(m_tooltip_->get_label()); });
   }
 
   thread_ = [this] {
@@ -288,6 +290,7 @@ auto waybar::modules::Clock::update() -> void {
     }
 
     m_tooltip_->set_markup(m_tlpText_);
+    if (auto* globo = util::find_globo(event_box_)) globo->refresh();
     label_.trigger_tooltip_query();
   }
 
