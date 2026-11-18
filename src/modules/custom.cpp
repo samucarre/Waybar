@@ -31,7 +31,10 @@ waybar::modules::Custom::Custom(const std::string& name, const std::string& id,
   // plain ALabel: the label carries the #custom-<name> widget name, the id and
   // MODULE_CLASS, so selectors such as `label.module` keep matching. AIconLabel
   // moved them onto box_; move them back so they live on exactly one widget.
-  if (image_path_.empty() && image_name_.empty() &&
+  // WayBian: not here. This bar's style.css was tuned on the GTK4 port of PR #5366,
+  // where the box always carries them (`#custom-x label`, padding on the box around
+  // an embedded icon), so the box keeps them, as AIconLabel left them.
+  if (false && image_path_.empty() && image_name_.empty() &&
       !(config_["icon"].isBool() && config_["icon"].asBool())) {
     box_.unset_name();
     box_.remove_css_class(MODULE_CLASS);
