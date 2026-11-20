@@ -46,8 +46,10 @@ int Globo::gap(Gtk::Widget& w) {
   // The root's height is its CONTENT height (GTK4), which already stops above the bar's bottom border: a popup
   // offset by this gap starts right over the border line (the bar's "line"), so the popup's own outline can carry
   // the line on around itself. Subtracting the border here again put the popups 2 px too high (3-nov-2026).
-  const int h = gtk_widget_get_height(GTK_WIDGET(root)) - static_cast<int>(std::lround(b.origin.y + b.size.height));
-  return h > 0 ? h : 0;
+  // Since BarWindow lays the border out under the modules (as GTK3 did), the modules reach the window's bottom
+  // edge, past the content height: the gap is then negative (-border) and lifts the popup over the line. Clamping
+  // it to 0 left the line showing across the top of menus and globos (20-nov-2026).
+  return gtk_widget_get_height(GTK_WIDGET(root)) - static_cast<int>(std::lround(b.origin.y + b.size.height));
 }
 
 void Globo::enter() {
